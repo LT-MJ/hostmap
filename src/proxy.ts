@@ -42,9 +42,8 @@ export async function proxy(request: NextRequest) {
 
   // Must be called immediately after client construction, with nothing else
   // awaited in between, or the refreshed-cookie write above can be skipped.
-  const {
-    data: { claims },
-  } = await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims ?? null;
 
   const { pathname } = request.nextUrl;
   const isAdminRoute = pathname.startsWith("/admin");
