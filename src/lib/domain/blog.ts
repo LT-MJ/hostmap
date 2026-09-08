@@ -167,10 +167,46 @@ export async function publishPost(postId: string, changeNote?: string): Promise<
   if (error) throw new Error(error.message);
 }
 
+export async function schedulePost(postId: string, scheduledAt: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("schedule_blog_post", { p_post_id: postId, p_scheduled_at: scheduledAt });
+  if (error) throw new Error(error.message);
+}
+
 export async function unpublishPost(postId: string): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("unpublish_blog_post", { p_post_id: postId });
   if (error) throw new Error(error.message);
+}
+
+export async function listPostRevisions(postId: string) {
+  await requirePermission("blog.view");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("blog_post_revisions")
+    .select("id, revision_number, author_id, change_note, created_at")
+    .eq("post_id", postId)
+    .order("revision_number", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function restoreRevisionIntoDraft(postId: string, revisionId: string): Promise<void> {
+  await requirePermission("blog.update");
+  const supabase = await createClient();
+  const { data: revision, error: revisionError } = await supabase
+    .from("blog_post_revisions")
+    .select("blocks_snapshot")
+    .eq("id", revisionId)
+    .eq("post_id", postId)
+    .single();
+  if (revisionError) throw new Error(revisionError.message);
+
+  const snapshot = (revision.blocks_snapshot ?? []) as BlogPostBlockRow[];
+  await savePostBlocks(
+    postId,
+    snapshot.map((b) => ({ position: b.position, block_type: b.block_type, config: b.config, is_hidden: b.is_hidden })),
+  );
 }
 
 export async function deletePost(postId: string): Promise<void> {

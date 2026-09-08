@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { inviteStaffMember, updateStaffRoles } from "@/lib/domain/staff";
 import type { RoleKey } from "@/lib/domain/rbac";
 
-export async function inviteStaffAction(formData: FormData): Promise<{ error: string | null }> {
+export async function inviteStaffAction(
+  _prevState: { error: string | null },
+  formData: FormData,
+): Promise<{ error: string | null }> {
   const email = formData.get("email");
   const fullName = formData.get("fullName");
   const roleKeys = formData.getAll("roles") as RoleKey[];

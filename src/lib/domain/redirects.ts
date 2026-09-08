@@ -71,6 +71,33 @@ export async function createRedirect(input: {
   if (error) throw new Error(error.message);
 }
 
+export type NotFoundLogRow = {
+  id: string;
+  url: string;
+  referrer: string | null;
+  hit_count: number;
+  last_seen_at: string;
+};
+
+export async function listNotFoundLog(): Promise<NotFoundLogRow[]> {
+  await requirePermission("seo.manage");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("not_found_log")
+    .select("*")
+    .order("hit_count", { ascending: false })
+    .limit(100);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as NotFoundLogRow[];
+}
+
+export async function dismissNotFoundEntry(id: string): Promise<void> {
+  await requirePermission("seo.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.from("not_found_log").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 export async function deleteRedirect(id: string): Promise<void> {
   await requirePermission("seo.manage");
   const supabase = await createClient();
