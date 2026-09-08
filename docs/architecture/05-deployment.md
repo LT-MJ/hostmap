@@ -41,12 +41,20 @@ QA gate (§91) if it ever did.
   Development), matching the table above — Preview's Supabase URL/keys
   point at that PR's branch database, not production.
 - **Vercel Cron** (`vercel.json`'s `crons` array) hits
-  `app/api/cron/publish-scheduled/route.ts` on a short interval (every
-  5–15 minutes is plenty for a content CMS); the route checks the
-  `CRON_SECRET` header before doing anything, then calls the
-  `publish_scheduled_content()` RPC. This is the mechanism behind §11's
-  "no `setTimeout`, no fake async" — a real scheduled trigger, and the
-  function itself is idempotent per-row (see [03-cms.md](./03-cms.md)).
+  `app/api/cron/publish-scheduled/route.ts` once daily (`0 6 * * *`); the
+  route checks the `CRON_SECRET` header before doing anything, then calls
+  the `publish_scheduled_content()` RPC. This is the mechanism behind
+  §11's "no `setTimeout`, no fake async" — a real scheduled trigger, and
+  the function itself is idempotent per-row (see [03-cms.md](./03-cms.md)).
+  **Plan constraint, discovered at actual deploy time, not assumed up
+  front:** Vercel's Hobby plan rejects any cron schedule that would fire
+  more than once a day — the original design here called for a 5–15
+  minute interval, which a real deployment attempt bounced with
+  `cron_jobs_limits_reached`. On Hobby, a page/post scheduled to publish
+  at a given time may not actually go live for up to ~24 hours after that
+  time, not minutes — real, and worth knowing before promising an editor
+  a specific publish time. Upgrading the Vercel team to Pro lifts this
+  back to a short interval; nothing else about the design changes.
 - No Edge runtime is used for anything touching Supabase auth/data —
   `proxy.ts` runs on the Node.js runtime (the only runtime it supports as
   of Next.js 16); nothing in this app needs Supabase's separate Edge
