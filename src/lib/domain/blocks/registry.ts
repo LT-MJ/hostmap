@@ -108,6 +108,7 @@ export const blockRegistry: Record<string, AnyBlockDefinition> = {
     Editor: FaqEditor,
     Render: faq.default,
     getHeadingOutline: faq.getHeadingOutline,
+    getJsonLd: faq.getJsonLd,
   } as unknown as AnyBlockDefinition,
   stats: {
     key: "stats",

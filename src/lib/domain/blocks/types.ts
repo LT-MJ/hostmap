@@ -29,6 +29,15 @@ export type BlockDefinition<Config, Data = undefined> = {
   requiresPermission?: PermissionKey;
   getHeadingOutline?: (config: Config) => HeadingNode[];
   getIssues?: (config: Config) => BlockIssue[];
+  /**
+   * Pure — returns a plain JSON-LD object or null, never touches
+   * request-scoped APIs. Safe in both bundles for the same reason
+   * getHeadingOutline is; render-page-blocks.tsx (server-only) is what
+   * wraps the result in a nonce'd <script> tag, so no block's Render
+   * component needs its own server-only dependency just to emit structured
+   * data. See docs/architecture/03-cms.md.
+   */
+  getJsonLd?: (config: Config) => object | null;
 };
 
 // Type-erased view used by the registry map/heading validator, which handle

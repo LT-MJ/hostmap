@@ -5,7 +5,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { toJsonLd } from "@/lib/domain/seo/json-ld";
 import type { HeadingNode } from "../../types";
 
 const faqItemSchema = z.object({
@@ -27,24 +26,25 @@ export function getHeadingOutline(config: Config): HeadingNode[] {
   return config.heading ? [{ level: 2, text: config.heading }] : [];
 }
 
-export default function Render({ config }: { config: Config }) {
-  const jsonLd = {
+/** Pure — see BlockDefinition.getJsonLd. Nonce-wrapping happens in
+ * render-page-blocks.tsx, the one place that's actually server-only. */
+export function getJsonLd(config: Config): object | null {
+  const items = config.items.filter((item) => item.question && item.answer);
+  if (items.length === 0) return null;
+  return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: config.items
-      .filter((item) => item.question && item.answer)
-      .map((item) => ({
-        "@type": "Question",
-        name: item.question,
-        acceptedAnswer: { "@type": "Answer", text: item.answer },
-      })),
+    mainEntity: items.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
   };
+}
 
+export default function Render({ config }: { config: Config }) {
   return (
     <section className="mx-auto max-w-3xl px-6 py-16">
-      {config.items.length > 0 && (
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: toJsonLd(jsonLd) }} />
-      )}
       {config.heading && <h2 className="mb-6 text-3xl font-semibold tracking-tight">{config.heading}</h2>}
       <Accordion>
         {config.items.map((item, i) => (

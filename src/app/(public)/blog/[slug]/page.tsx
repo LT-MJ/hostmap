@@ -4,6 +4,7 @@ import { getPublishedPostBySlug } from "@/lib/domain/blog";
 import { renderPageBlocks } from "@/lib/domain/blocks/render-page-blocks";
 import { buildMetadata, absoluteUrl } from "@/lib/domain/seo/metadata";
 import { toJsonLd } from "@/lib/domain/seo/json-ld";
+import { getNonce } from "@/lib/domain/seo/nonce";
 
 type Props = PageProps<"/blog/[slug]">;
 
@@ -24,7 +25,7 @@ export default async function BlogPostPage({ params }: Props) {
   const content = await getPublishedPostBySlug(slug);
   if (!content) notFound();
 
-  const rendered = await renderPageBlocks(content.blocks);
+  const [rendered, nonce] = await Promise.all([renderPageBlocks(content.blocks), getNonce()]);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -37,7 +38,7 @@ export default async function BlogPostPage({ params }: Props) {
 
   return (
     <article>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: toJsonLd(jsonLd) }} />
+      <script nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: toJsonLd(jsonLd) }} />
       <header className="mx-auto max-w-3xl px-6 pt-16">
         <h1 className="text-4xl font-semibold tracking-tight">{content.post.title}</h1>
         <div className="mt-3 flex gap-3 text-sm text-muted-foreground">

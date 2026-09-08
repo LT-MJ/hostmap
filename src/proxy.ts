@@ -3,15 +3,40 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Next.js 16 renamed `middleware.ts`/`middleware()` to `proxy.ts`/`proxy()`
- * (same mechanism). This is a UX nicety only — an optimistic, cookie-claims
- * check that redirects obviously-unauthenticated requests before rendering
- * starts. It is never the real authorization gate; every protected
- * layout/Server Action re-verifies via `requireStaffSession()`/
- * `requirePermission()` (src/lib/supabase/guards.ts), and RLS is the
- * authoritative boundary underneath both. See docs/architecture/02-auth.md.
+ * (same mechanism). Two independent jobs share this file because both need
+ * to run before every render: (1) an optimistic, cookie-claims auth check
+ * (a UX nicety only — never the real gate; see requireStaffSession()/
+ * requirePermission() in lib/supabase/guards.ts and RLS underneath both),
+ * and (2) a per-request CSP nonce (§8). The nonce is "free" here — a
+ * nonce-based CSP normally forces every page into dynamic rendering, but
+ * every route in this app already is dynamic (cookies()-based Supabase
+ * auth), so there's no static-optimization cost being traded away.
  */
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const isDev = process.env.NODE_ENV === "development";
+  const cspHeader = `
+    default-src 'self';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""};
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' blob: data: https://*.supabase.co;
+    font-src 'self';
+    connect-src 'self' https://*.supabase.co;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+    upgrade-insecure-requests;
+  `
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", cspHeader);
+
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", cspHeader);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +56,8 @@ export async function proxy(request: NextRequest) {
           for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
           }
-          response = NextResponse.next({ request });
+          response = NextResponse.next({ request: { headers: requestHeaders } });
+          response.headers.set("Content-Security-Policy", cspHeader);
           for (const { name, value, options } of cookiesToSet) {
             response.cookies.set(name, value, options);
           }
