@@ -34,10 +34,10 @@ function buildTree(items: NavigationItemRow[]): NavigationTree[] {
 /** Public — relies on RLS (navigation is world-readable, see migration 0005). */
 export async function getMenuTree(menuKey: "primary" | "footer"): Promise<NavigationTree[]> {
   const supabase = await createClient();
-  const { data: menu } = await supabase.from("navigation_menus").select("id").eq("key", menuKey).maybeSingle();
+  const { data: menu } = await supabase.from("hostmap_navigation_menus").select("id").eq("key", menuKey).maybeSingle();
   if (!menu) return [];
   const { data: items, error } = await supabase
-    .from("navigation_items")
+    .from("hostmap_navigation_items")
     .select("*")
     .eq("menu_id", menu.id);
   if (error) throw new Error(error.message);
@@ -48,12 +48,12 @@ export async function listMenuItemsForAdmin(menuKey: "primary" | "footer"): Prom
   await requirePermission("navigation.manage");
   const supabase = await createClient();
   const { data: menu, error: menuError } = await supabase
-    .from("navigation_menus")
+    .from("hostmap_navigation_menus")
     .select("id")
     .eq("key", menuKey)
     .single();
   if (menuError) throw new Error(menuError.message);
-  const { data, error } = await supabase.from("navigation_items").select("*").eq("menu_id", menu.id).order("position");
+  const { data, error } = await supabase.from("hostmap_navigation_items").select("*").eq("menu_id", menu.id).order("position");
   if (error) throw new Error(error.message);
   return (data ?? []) as NavigationItemRow[];
 }
@@ -65,19 +65,19 @@ export async function upsertMenuItem(
   await requirePermission("navigation.manage");
   const supabase = await createClient();
   const { data: menu, error: menuError } = await supabase
-    .from("navigation_menus")
+    .from("hostmap_navigation_menus")
     .select("id")
     .eq("key", menuKey)
     .single();
   if (menuError) throw new Error(menuError.message);
 
-  const { error } = await supabase.from("navigation_items").upsert({ ...item, menu_id: menu.id });
+  const { error } = await supabase.from("hostmap_navigation_items").upsert({ ...item, menu_id: menu.id });
   if (error) throw new Error(error.message);
 }
 
 export async function deleteMenuItem(itemId: string): Promise<void> {
   await requirePermission("navigation.manage");
   const supabase = await createClient();
-  const { error } = await supabase.from("navigation_items").delete().eq("id", itemId);
+  const { error } = await supabase.from("hostmap_navigation_items").delete().eq("id", itemId);
   if (error) throw new Error(error.message);
 }

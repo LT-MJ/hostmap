@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/supabase/guards";
 import { validateContent, hasBlockingIssues } from "@/lib/domain/blocks/validate-content";
+import type { Json } from "@/lib/supabase/database.types";
 
 export type PageBlockRow = {
   id: string;
@@ -49,8 +50,8 @@ export type PublishedPageContent = {
 export async function getPublishedPageBySlug(slug: string): Promise<PublishedPageContent | null> {
   const supabase = await createClient();
   const { data: page, error } = await supabase
-    .from("pages")
-    .select("*, page_revisions!pages_published_revision_id_fkey(blocks_snapshot, seo_snapshot)")
+    .from("hostmap_pages")
+    .select("*, page_revisions:hostmap_page_revisions!hostmap_pages_published_revision_id_fkey(blocks_snapshot, seo_snapshot)")
     .eq("slug", slug)
     .eq("status", "published")
     .is("deleted_at", null)
@@ -75,7 +76,7 @@ export async function listPagesForAdmin(): Promise<PageRow[]> {
   await requirePermission("pages.view");
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("pages")
+    .from("hostmap_pages")
     .select("*")
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
@@ -89,8 +90,8 @@ export async function getPageForEditor(
   await requirePermission("pages.view");
   const supabase = await createClient();
   const [{ data: page, error: pageError }, { data: blocks, error: blocksError }] = await Promise.all([
-    supabase.from("pages").select("*").eq("id", pageId).maybeSingle(),
-    supabase.from("page_blocks").select("*").eq("page_id", pageId).order("position"),
+    supabase.from("hostmap_pages").select("*").eq("id", pageId).maybeSingle(),
+    supabase.from("hostmap_page_blocks").select("*").eq("page_id", pageId).order("position"),
   ]);
   if (pageError) throw new Error(pageError.message);
   if (blocksError) throw new Error(blocksError.message);
@@ -102,7 +103,7 @@ export async function createPage(input: { title: string; slug: string }): Promis
   await requirePermission("pages.create");
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("pages")
+    .from("hostmap_pages")
     .insert({ title: input.title, slug: input.slug })
     .select()
     .single();
@@ -135,7 +136,7 @@ export async function updatePageFields(
 ): Promise<void> {
   await requirePermission("pages.update");
   const supabase = await createClient();
-  const { error } = await supabase.from("pages").update(fields).eq("id", pageId);
+  const { error } = await supabase.from("hostmap_pages").update(fields).eq("id", pageId);
   if (error) throw new Error(error.message);
 }
 
@@ -151,17 +152,17 @@ export async function savePageBlocks(
   // scale (dozens of blocks per page, not thousands) — see
   // docs/architecture/03-cms.md's autosave section for the debounce/
   // stale-response guard this is called from.
-  const { error: deleteError } = await supabase.from("page_blocks").delete().eq("page_id", pageId);
+  const { error: deleteError } = await supabase.from("hostmap_page_blocks").delete().eq("page_id", pageId);
   if (deleteError) throw new Error(deleteError.message);
 
   if (blocks.length === 0) return;
 
-  const { error: insertError } = await supabase.from("page_blocks").insert(
+  const { error: insertError } = await supabase.from("hostmap_page_blocks").insert(
     blocks.map((b) => ({
       page_id: pageId,
       position: b.position,
       block_type: b.block_type,
-      config: b.config,
+      config: b.config as Json,
       is_hidden: b.is_hidden,
     })),
   );
@@ -179,7 +180,7 @@ export async function publishPage(pageId: string, changeNote?: string): Promise<
   const supabase = await createClient();
 
   const { data: blocks, error: blocksError } = await supabase
-    .from("page_blocks")
+    .from("hostmap_page_blocks")
     .select("block_type, config")
     .eq("page_id", pageId)
     .eq("is_hidden", false);
@@ -190,31 +191,31 @@ export async function publishPage(pageId: string, changeNote?: string): Promise<
     throw new PublishBlockedError(issues);
   }
 
-  const { error } = await supabase.rpc("publish_page", { p_page_id: pageId, p_change_note: changeNote ?? null });
+  const { error } = await supabase.rpc("hostmap_publish_page", { p_page_id: pageId, p_change_note: changeNote });
   if (error) throw new Error(error.message);
 }
 
 export async function schedulePage(pageId: string, scheduledAt: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("schedule_page", { p_page_id: pageId, p_scheduled_at: scheduledAt });
+  const { error } = await supabase.rpc("hostmap_schedule_page", { p_page_id: pageId, p_scheduled_at: scheduledAt });
   if (error) throw new Error(error.message);
 }
 
 export async function unpublishPage(pageId: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("unpublish_page", { p_page_id: pageId });
+  const { error } = await supabase.rpc("hostmap_unpublish_page", { p_page_id: pageId });
   if (error) throw new Error(error.message);
 }
 
 export async function deletePage(pageId: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("delete_page", { p_page_id: pageId });
+  const { error } = await supabase.rpc("hostmap_delete_page", { p_page_id: pageId });
   if (error) throw new Error(error.message);
 }
 
 export async function restorePage(pageId: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("restore_page", { p_page_id: pageId });
+  const { error } = await supabase.rpc("hostmap_restore_page", { p_page_id: pageId });
   if (error) throw new Error(error.message);
 }
 
@@ -222,7 +223,7 @@ export async function listPageRevisions(pageId: string) {
   await requirePermission("pages.view");
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("page_revisions")
+    .from("hostmap_page_revisions")
     .select("id, revision_number, author_id, change_note, created_at")
     .eq("page_id", pageId)
     .order("revision_number", { ascending: false });
@@ -234,7 +235,7 @@ export async function restoreRevisionIntoDraft(pageId: string, revisionId: strin
   await requirePermission("pages.update");
   const supabase = await createClient();
   const { data: revision, error: revisionError } = await supabase
-    .from("page_revisions")
+    .from("hostmap_page_revisions")
     .select("blocks_snapshot")
     .eq("id", revisionId)
     .eq("page_id", pageId)

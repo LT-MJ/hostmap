@@ -31,12 +31,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   const [{ data: pages }, { data: posts }, { count: mediaCount }, { count: staffCount }, { data: activity }] =
     await Promise.all([
-      supabase.from("pages").select("status").is("deleted_at", null),
-      supabase.from("blog_posts").select("status").is("deleted_at", null),
-      supabase.from("media").select("id", { count: "exact", head: true }),
-      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("user_type", "staff"),
+      supabase.from("hostmap_pages").select("status").is("deleted_at", null),
+      supabase.from("hostmap_blog_posts").select("status").is("deleted_at", null),
+      supabase.from("hostmap_media").select("id", { count: "exact", head: true }),
+      supabase.from("hostmap_profiles").select("id", { count: "exact", head: true }).eq("user_type", "staff"),
       supabase
-        .from("audit_logs")
+        .from("hostmap_audit_logs")
         .select("id, action, entity_type, actor_email, created_at")
         .order("created_at", { ascending: false })
         .limit(10),

@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/supabase/guards";
 import { validateContent, hasBlockingIssues } from "@/lib/domain/blocks/validate-content";
 import { mediaPublicUrl } from "@/lib/domain/media";
 import type { Config as BlogGridConfig, BlogGridPost } from "@/lib/domain/blocks/definitions/blog-grid/Render";
+import type { Json } from "@/lib/supabase/database.types";
 
 export type BlogPostRow = {
   id: string;
@@ -35,8 +36,8 @@ export type BlogPostBlockRow = {
 export async function getPublishedPostBySlug(slug: string) {
   const supabase = await createClient();
   const { data: post, error } = await supabase
-    .from("blog_posts")
-    .select("*, blog_post_revisions!blog_posts_published_revision_id_fkey(blocks_snapshot, seo_snapshot)")
+    .from("hostmap_blog_posts")
+    .select("*, blog_post_revisions:hostmap_blog_post_revisions!hostmap_blog_posts_published_revision_id_fkey(blocks_snapshot, seo_snapshot)")
     .eq("slug", slug)
     .eq("status", "published")
     .is("deleted_at", null)
@@ -56,7 +57,7 @@ export async function getPublishedPostBySlug(slug: string) {
 export async function getPublishedPostsForGrid(config: BlogGridConfig): Promise<BlogGridPost[]> {
   const supabase = await createClient();
   let query = supabase
-    .from("blog_posts")
+    .from("hostmap_blog_posts")
     .select("slug, title, excerpt, featured_media_id, media:featured_media_id(bucket, storage_path)")
     .eq("status", "published")
     .is("deleted_at", null)
@@ -65,7 +66,7 @@ export async function getPublishedPostsForGrid(config: BlogGridConfig): Promise<
 
   if (config.categorySlug) {
     const { data: category } = await supabase
-      .from("blog_categories")
+      .from("hostmap_blog_categories")
       .select("id")
       .eq("slug", config.categorySlug)
       .maybeSingle();
@@ -90,7 +91,7 @@ export async function listPostsForAdmin(): Promise<BlogPostRow[]> {
   await requirePermission("blog.view");
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("blog_posts")
+    .from("hostmap_blog_posts")
     .select("*")
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
@@ -102,8 +103,8 @@ export async function getPostForEditor(postId: string) {
   await requirePermission("blog.view");
   const supabase = await createClient();
   const [{ data: post, error: postError }, { data: blocks, error: blocksError }] = await Promise.all([
-    supabase.from("blog_posts").select("*").eq("id", postId).maybeSingle(),
-    supabase.from("blog_post_blocks").select("*").eq("post_id", postId).order("position"),
+    supabase.from("hostmap_blog_posts").select("*").eq("id", postId).maybeSingle(),
+    supabase.from("hostmap_blog_post_blocks").select("*").eq("post_id", postId).order("position"),
   ]);
   if (postError) throw new Error(postError.message);
   if (blocksError) throw new Error(blocksError.message);
@@ -114,7 +115,7 @@ export async function getPostForEditor(postId: string) {
 export async function createPost(input: { title: string; slug: string }): Promise<BlogPostRow> {
   await requirePermission("blog.create");
   const supabase = await createClient();
-  const { data, error } = await supabase.from("blog_posts").insert(input).select().single();
+  const { data, error } = await supabase.from("hostmap_blog_posts").insert(input).select().single();
   if (error) throw new Error(error.message);
   return data as BlogPostRow;
 }
@@ -125,7 +126,7 @@ export async function updatePostFields(
 ): Promise<void> {
   await requirePermission("blog.update");
   const supabase = await createClient();
-  const { error } = await supabase.from("blog_posts").update(fields).eq("id", postId);
+  const { error } = await supabase.from("hostmap_blog_posts").update(fields).eq("id", postId);
   if (error) throw new Error(error.message);
 }
 
@@ -135,12 +136,12 @@ export async function savePostBlocks(
 ): Promise<void> {
   await requirePermission("blog.update");
   const supabase = await createClient();
-  const { error: deleteError } = await supabase.from("blog_post_blocks").delete().eq("post_id", postId);
+  const { error: deleteError } = await supabase.from("hostmap_blog_post_blocks").delete().eq("post_id", postId);
   if (deleteError) throw new Error(deleteError.message);
   if (blocks.length === 0) return;
   const { error } = await supabase
-    .from("blog_post_blocks")
-    .insert(blocks.map((b) => ({ ...b, post_id: postId })));
+    .from("hostmap_blog_post_blocks")
+    .insert(blocks.map((b) => ({ ...b, post_id: postId, config: b.config as Json })));
   if (error) throw new Error(error.message);
 }
 
@@ -154,7 +155,7 @@ export async function publishPost(postId: string, changeNote?: string): Promise<
   await requirePermission("blog.publish");
   const supabase = await createClient();
   const { data: blocks, error: blocksError } = await supabase
-    .from("blog_post_blocks")
+    .from("hostmap_blog_post_blocks")
     .select("block_type, config")
     .eq("post_id", postId)
     .eq("is_hidden", false);
@@ -163,19 +164,19 @@ export async function publishPost(postId: string, changeNote?: string): Promise<
   const issues = validateContent((blocks ?? []) as Array<{ block_type: string; config: unknown }>);
   if (hasBlockingIssues(issues)) throw new PublishBlockedError(issues);
 
-  const { error } = await supabase.rpc("publish_blog_post", { p_post_id: postId, p_change_note: changeNote ?? null });
+  const { error } = await supabase.rpc("hostmap_publish_blog_post", { p_post_id: postId, p_change_note: changeNote });
   if (error) throw new Error(error.message);
 }
 
 export async function schedulePost(postId: string, scheduledAt: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("schedule_blog_post", { p_post_id: postId, p_scheduled_at: scheduledAt });
+  const { error } = await supabase.rpc("hostmap_schedule_blog_post", { p_post_id: postId, p_scheduled_at: scheduledAt });
   if (error) throw new Error(error.message);
 }
 
 export async function unpublishPost(postId: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("unpublish_blog_post", { p_post_id: postId });
+  const { error } = await supabase.rpc("hostmap_unpublish_blog_post", { p_post_id: postId });
   if (error) throw new Error(error.message);
 }
 
@@ -183,7 +184,7 @@ export async function listPostRevisions(postId: string) {
   await requirePermission("blog.view");
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("blog_post_revisions")
+    .from("hostmap_blog_post_revisions")
     .select("id, revision_number, author_id, change_note, created_at")
     .eq("post_id", postId)
     .order("revision_number", { ascending: false });
@@ -195,7 +196,7 @@ export async function restoreRevisionIntoDraft(postId: string, revisionId: strin
   await requirePermission("blog.update");
   const supabase = await createClient();
   const { data: revision, error: revisionError } = await supabase
-    .from("blog_post_revisions")
+    .from("hostmap_blog_post_revisions")
     .select("blocks_snapshot")
     .eq("id", revisionId)
     .eq("post_id", postId)
@@ -211,6 +212,6 @@ export async function restoreRevisionIntoDraft(postId: string, revisionId: strin
 
 export async function deletePost(postId: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("delete_blog_post", { p_post_id: postId });
+  const { error } = await supabase.rpc("hostmap_delete_blog_post", { p_post_id: postId });
   if (error) throw new Error(error.message);
 }

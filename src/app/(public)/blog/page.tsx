@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function BlogIndexPage() {
   const supabase = await createClient();
   const { data } = await supabase
-    .from("blog_posts")
+    .from("hostmap_blog_posts")
     .select("slug, title, excerpt, published_at, media:featured_media_id(bucket, storage_path)")
     .eq("status", "published")
     .is("deleted_at", null)

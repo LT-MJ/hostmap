@@ -86,7 +86,7 @@ export async function uploadMedia(input: {
   const storagePath = safeStorageName(input.file.type);
 
   const { error: uploadError } = await supabase.storage
-    .from("media")
+    .from("hostmap_media")
     .upload(storagePath, input.file, { contentType: input.file.type, upsert: false });
   if (uploadError) {
     throw new Error(`Upload failed: ${uploadError.message}`);
@@ -95,9 +95,9 @@ export async function uploadMedia(input: {
   const { width, height } = await readImageDimensions(input.file);
 
   const { data, error } = await supabase
-    .from("media")
+    .from("hostmap_media")
     .insert({
-      bucket: "media",
+      bucket: "hostmap-media",
       storage_path: storagePath,
       mime_type: input.file.type,
       size_bytes: input.file.size,
@@ -111,7 +111,7 @@ export async function uploadMedia(input: {
     .single();
 
   if (error) {
-    await supabase.storage.from("media").remove([storagePath]);
+    await supabase.storage.from("hostmap-media").remove([storagePath]);
     throw new Error(`Could not save media record: ${error.message}`);
   }
 
@@ -121,7 +121,7 @@ export async function uploadMedia(input: {
 export async function listMedia(limit = 60): Promise<MediaRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("media")
+    .from("hostmap_media")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -140,6 +140,6 @@ export function mediaPublicUrl(row: Pick<MediaRow, "bucket" | "storage_path">): 
 export async function getMediaUrlById(mediaId: string | null): Promise<string | null> {
   if (!mediaId) return null;
   const supabase = await createClient();
-  const { data } = await supabase.from("media").select("bucket, storage_path").eq("id", mediaId).maybeSingle();
+  const { data } = await supabase.from("hostmap_media").select("bucket, storage_path").eq("id", mediaId).maybeSingle();
   return data ? mediaPublicUrl(data) : null;
 }

@@ -42,7 +42,7 @@ async function upsertAdminUser(): Promise<string> {
   });
   if (error || !data.user) throw new Error(`Could not create admin user: ${error?.message}`);
 
-  const { error: promoteError } = await supabase.rpc("promote_to_staff", {
+  const { error: promoteError } = await supabase.rpc("hostmap_promote_to_staff", {
     p_user_id: data.user.id,
     p_role_keys: ["super_admin"],
   });
@@ -53,7 +53,7 @@ async function upsertAdminUser(): Promise<string> {
 }
 
 async function seedSettings() {
-  await supabase.from("site_settings").upsert({
+  await supabase.from("hostmap_site_settings").upsert({
     id: 1,
     site_name: "hostmap",
     tagline: "Reliable hosting for growing businesses",
@@ -62,22 +62,22 @@ async function seedSettings() {
     seo_title_separator: "|",
     robots_default: "index, follow",
   });
-  await supabase.from("theme_settings").upsert({ id: 1, tokens: {}, dark_mode_enabled: true });
+  await supabase.from("hostmap_theme_settings").upsert({ id: 1, tokens: {}, dark_mode_enabled: true });
   console.log("Seeded site/theme settings");
 }
 
 async function seedNavigation() {
-  const { data: primary } = await supabase.from("navigation_menus").select("id").eq("key", "primary").single();
-  const { data: footer } = await supabase.from("navigation_menus").select("id").eq("key", "footer").single();
+  const { data: primary } = await supabase.from("hostmap_navigation_menus").select("id").eq("key", "primary").single();
+  const { data: footer } = await supabase.from("hostmap_navigation_menus").select("id").eq("key", "footer").single();
   if (!primary || !footer) throw new Error("Navigation menus not found — did migrations run?");
 
-  const { count } = await supabase.from("navigation_items").select("id", { count: "exact", head: true });
+  const { count } = await supabase.from("hostmap_navigation_items").select("id", { count: "exact", head: true });
   if (count && count > 0) {
     console.log("Navigation already seeded, skipping");
     return;
   }
 
-  await supabase.from("navigation_items").insert([
+  await supabase.from("hostmap_navigation_items").insert([
     { menu_id: primary.id, label: "Home", url: "/", position: 0 },
     { menu_id: primary.id, label: "Blog", url: "/blog", position: 1 },
     { menu_id: primary.id, label: "About", url: "/about", position: 2 },
@@ -94,7 +94,7 @@ async function publishPageWithBlocks(
   title: string,
   blocks: Array<{ block_type: string; config: unknown }>,
 ) {
-  const { data: existing } = await supabase.from("pages").select("id, status").eq("slug", slug).maybeSingle();
+  const { data: existing } = await supabase.from("hostmap_pages").select("id, status").eq("slug", slug).maybeSingle();
   if (existing?.status === "published") {
     console.log(`Page "${slug}" already published, skipping`);
     return;
@@ -104,19 +104,19 @@ async function publishPageWithBlocks(
     existing?.id ??
     (
       await supabase
-        .from("pages")
+        .from("hostmap_pages")
         .insert({ slug, title, author_id: adminUserId })
         .select("id")
         .single()
     ).data?.id;
   if (!pageId) throw new Error(`Could not create page "${slug}"`);
 
-  await supabase.from("page_blocks").delete().eq("page_id", pageId);
-  await supabase.from("page_blocks").insert(
+  await supabase.from("hostmap_page_blocks").delete().eq("page_id", pageId);
+  await supabase.from("hostmap_page_blocks").insert(
     blocks.map((b, i) => ({ page_id: pageId, position: i, block_type: b.block_type, config: b.config })),
   );
 
-  const { error } = await supabase.rpc("publish_page", { p_page_id: pageId });
+  const { error } = await supabase.rpc("hostmap_publish_page", { p_page_id: pageId });
   if (error) throw new Error(`Could not publish page "${slug}": ${error.message}`);
   console.log(`Seeded + published page: /${slug === "home" ? "" : slug}`);
 }
@@ -189,15 +189,15 @@ async function seedPages(adminUserId: string) {
 
 async function seedBlog(adminUserId: string) {
   const { data: existingCategory } = await supabase
-    .from("blog_categories")
+    .from("hostmap_blog_categories")
     .select("id")
     .eq("slug", "news")
     .maybeSingle();
   const categoryId =
     existingCategory?.id ??
-    (await supabase.from("blog_categories").insert({ name: "News", slug: "news" }).select("id").single()).data?.id;
+    (await supabase.from("hostmap_blog_categories").insert({ name: "News", slug: "news" }).select("id").single()).data?.id;
 
-  const { data: existingPost } = await supabase.from("blog_posts").select("id, status").eq("slug", "welcome").maybeSingle();
+  const { data: existingPost } = await supabase.from("hostmap_blog_posts").select("id, status").eq("slug", "welcome").maybeSingle();
   if (existingPost?.status === "published") {
     console.log("Blog already seeded, skipping");
     return;
@@ -207,15 +207,15 @@ async function seedBlog(adminUserId: string) {
     existingPost?.id ??
     (
       await supabase
-        .from("blog_posts")
+        .from("hostmap_blog_posts")
         .insert({ slug: "welcome", title: "Welcome to our new site", author_id: adminUserId, category_id: categoryId, excerpt: "A quick introduction to what's new." })
         .select("id")
         .single()
     ).data?.id;
   if (!postId) throw new Error("Could not create blog post");
 
-  await supabase.from("blog_post_blocks").delete().eq("post_id", postId);
-  await supabase.from("blog_post_blocks").insert([
+  await supabase.from("hostmap_blog_post_blocks").delete().eq("post_id", postId);
+  await supabase.from("hostmap_blog_post_blocks").insert([
     {
       post_id: postId,
       position: 0,
@@ -224,7 +224,7 @@ async function seedBlog(adminUserId: string) {
     },
   ]);
 
-  const { error } = await supabase.rpc("publish_blog_post", { p_post_id: postId });
+  const { error } = await supabase.rpc("hostmap_publish_blog_post", { p_post_id: postId });
   if (error) throw new Error(`Could not publish blog post: ${error.message}`);
   console.log("Seeded + published blog post: /blog/welcome");
 }

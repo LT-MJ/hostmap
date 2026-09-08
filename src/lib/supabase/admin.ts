@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
 /**
  * Secret-key client for the narrow set of operations that genuinely need
@@ -11,7 +12,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
  * for why this is deliberately not the default client.
  */
 export function createAdminClient() {
-  return createSupabaseClient(
+  return createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SECRET_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } },

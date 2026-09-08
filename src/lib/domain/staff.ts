@@ -22,8 +22,8 @@ export async function getMyPermissions(): Promise<Set<PermissionKey>> {
   if (!claims) return new Set();
   const supabase = await createClient();
   const { data } = await supabase
-    .from("user_roles")
-    .select("roles(role_permissions(permissions(key)))")
+    .from("hostmap_user_roles")
+    .select("roles:hostmap_roles(role_permissions:hostmap_role_permissions(permissions:hostmap_permissions(key)))")
     .eq("user_id", claims.sub);
 
   const keys = new Set<PermissionKey>();
@@ -40,7 +40,7 @@ export async function getMyRoleKeys(): Promise<RoleKey[]> {
   const claims = await getAuthClaims();
   if (!claims) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("user_roles").select("roles(key)").eq("user_id", claims.sub);
+  const { data } = await supabase.from("hostmap_user_roles").select("roles:hostmap_roles(key)").eq("user_id", claims.sub);
   return (data ?? []).map((row) => (row.roles as unknown as { key: RoleKey }).key);
 }
 
@@ -48,8 +48,8 @@ export async function listStaff(): Promise<StaffMember[]> {
   await requirePermission("users.manage");
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, user_type, user_roles(roles(key))")
+    .from("hostmap_profiles")
+    .select("id, full_name, user_type, user_roles:hostmap_user_roles(roles:hostmap_roles(key))")
     .eq("user_type", "staff");
   if (error) throw new Error(error.message);
 
@@ -75,7 +75,7 @@ export async function inviteStaffMember(input: { email: string; fullName: string
     throw new Error(inviteError?.message ?? "Could not invite user.");
   }
 
-  const { error: promoteError } = await adminClient.rpc("promote_to_staff", {
+  const { error: promoteError } = await adminClient.rpc("hostmap_promote_to_staff", {
     p_user_id: invited.user.id,
     p_role_keys: input.roleKeys,
   });
@@ -86,15 +86,15 @@ export async function updateStaffRoles(userId: string, roleKeys: RoleKey[]): Pro
   await requirePermission("users.manage");
   const supabase = await createClient();
 
-  const { error: deleteError } = await supabase.from("user_roles").delete().eq("user_id", userId);
+  const { error: deleteError } = await supabase.from("hostmap_user_roles").delete().eq("user_id", userId);
   if (deleteError) throw new Error(deleteError.message);
 
   if (roleKeys.length === 0) return;
-  const { data: roles, error: rolesError } = await supabase.from("roles").select("id, key").in("key", roleKeys);
+  const { data: roles, error: rolesError } = await supabase.from("hostmap_roles").select("id, key").in("key", roleKeys);
   if (rolesError) throw new Error(rolesError.message);
 
   const { error: insertError } = await supabase
-    .from("user_roles")
+    .from("hostmap_user_roles")
     .insert((roles ?? []).map((role) => ({ user_id: userId, role_id: role.id })));
   if (insertError) throw new Error(insertError.message);
 }

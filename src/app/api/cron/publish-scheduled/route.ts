@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createAdminClient();
-  const { data, error } = await supabase.rpc("publish_scheduled_content");
+  const { data, error } = await supabase.rpc("hostmap_publish_scheduled_content");
 
   if (error) {
     console.error("publish_scheduled_content failed", error);

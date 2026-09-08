@@ -60,7 +60,7 @@ export async function requirePermission(
 ): Promise<AuthClaims> {
   const claims = await requireStaffSession();
   const supabase = await createClient();
-  const { data: allowed, error } = await supabase.rpc("has_permission", {
+  const { data: allowed, error } = await supabase.rpc("hostmap_has_permission", {
     p_user_id: claims.sub,
     p_permission_key: permissionKey,
   });

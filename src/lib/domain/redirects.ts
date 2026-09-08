@@ -17,22 +17,22 @@ export type RedirectRow = {
  * this isn't in proxy.ts. */
 export async function findRedirect(path: string): Promise<RedirectRow | null> {
   const supabase = await createClient();
-  const { data } = await supabase.from("redirects").select("*").eq("source_path", path).eq("is_active", true).maybeSingle();
+  const { data } = await supabase.from("hostmap_redirects").select("*").eq("source_path", path).eq("is_active", true).maybeSingle();
   if (data) {
-    await supabase.rpc("increment_redirect_hit", { p_redirect_id: data.id });
+    await supabase.rpc("hostmap_increment_redirect_hit", { p_redirect_id: data.id });
   }
   return (data as RedirectRow | null) ?? null;
 }
 
 export async function recordNotFound(url: string, referrer: string | null): Promise<void> {
   const supabase = await createClient();
-  await supabase.rpc("log_not_found", { p_url: url, p_referrer: referrer });
+  await supabase.rpc("hostmap_log_not_found", { p_url: url, p_referrer: referrer ?? undefined });
 }
 
 export async function listRedirectsForAdmin(): Promise<RedirectRow[]> {
   await requirePermission("seo.manage");
   const supabase = await createClient();
-  const { data, error } = await supabase.from("redirects").select("*").order("hit_count", { ascending: false });
+  const { data, error } = await supabase.from("hostmap_redirects").select("*").order("hit_count", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as RedirectRow[];
 }
@@ -54,7 +54,7 @@ export async function createRedirect(input: {
   // admin-curated redirect list (not user-generated at scale) — not worth
   // a recursive query here yet.
   const { data: reverse } = await supabase
-    .from("redirects")
+    .from("hostmap_redirects")
     .select("id")
     .eq("source_path", input.destinationPath)
     .eq("destination_path", input.sourcePath)
@@ -63,7 +63,7 @@ export async function createRedirect(input: {
     throw new RedirectLoopError(`${input.destinationPath} already redirects back to ${input.sourcePath}.`);
   }
 
-  const { error } = await supabase.from("redirects").insert({
+  const { error } = await supabase.from("hostmap_redirects").insert({
     source_path: input.sourcePath,
     destination_path: input.destinationPath,
     status_code: input.statusCode ?? 301,
@@ -83,7 +83,7 @@ export async function listNotFoundLog(): Promise<NotFoundLogRow[]> {
   await requirePermission("seo.manage");
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("not_found_log")
+    .from("hostmap_not_found_log")
     .select("*")
     .order("hit_count", { ascending: false })
     .limit(100);
@@ -94,13 +94,13 @@ export async function listNotFoundLog(): Promise<NotFoundLogRow[]> {
 export async function dismissNotFoundEntry(id: string): Promise<void> {
   await requirePermission("seo.manage");
   const supabase = await createClient();
-  const { error } = await supabase.from("not_found_log").delete().eq("id", id);
+  const { error } = await supabase.from("hostmap_not_found_log").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
 
 export async function deleteRedirect(id: string): Promise<void> {
   await requirePermission("seo.manage");
   const supabase = await createClient();
-  const { error } = await supabase.from("redirects").delete().eq("id", id);
+  const { error } = await supabase.from("hostmap_redirects").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

@@ -38,17 +38,17 @@ describe.skipIf(!canRun)("RLS policies", () => {
     anonClient = createSupabaseClient(SUPABASE_URL!, PUBLISHABLE_KEY!);
 
     const { data: published, error: publishedError } = await admin
-      .from("pages")
+      .from("hostmap_pages")
       .insert({ slug: `rls-test-published-${Date.now()}`, title: "RLS test — published" })
       .select("id")
       .single();
     if (publishedError) throw publishedError;
     publishedPageId = published.id;
-    const { error: publishError } = await admin.rpc("publish_page", { p_page_id: publishedPageId });
+    const { error: publishError } = await admin.rpc("hostmap_publish_page", { p_page_id: publishedPageId });
     if (publishError) throw publishError;
 
     const { data: draft, error: draftError } = await admin
-      .from("pages")
+      .from("hostmap_pages")
       .insert({ slug: `rls-test-draft-${Date.now()}`, title: "RLS test — draft" })
       .select("id")
       .single();
@@ -63,9 +63,9 @@ describe.skipIf(!canRun)("RLS policies", () => {
     if (createUserError || !created.user) throw createUserError ?? new Error("createUser returned no user");
     editorUserId = created.user.id;
 
-    const { data: role, error: roleError } = await admin.from("roles").select("id").eq("key", "content_editor").single();
+    const { data: role, error: roleError } = await admin.from("hostmap_roles").select("id").eq("key", "content_editor").single();
     if (roleError) throw roleError;
-    const { error: assignError } = await admin.from("user_roles").insert({ user_id: editorUserId, role_id: role.id });
+    const { error: assignError } = await admin.from("hostmap_user_roles").insert({ user_id: editorUserId, role_id: role.id });
     if (assignError) throw assignError;
 
     editorClient = createSupabaseClient(SUPABASE_URL!, PUBLISHABLE_KEY!);
@@ -74,54 +74,54 @@ describe.skipIf(!canRun)("RLS policies", () => {
   });
 
   afterAll(async () => {
-    await admin.from("pages").delete().in("id", [publishedPageId, draftPageId]);
+    await admin.from("hostmap_pages").delete().in("id", [publishedPageId, draftPageId]);
     if (editorUserId) await admin.auth.admin.deleteUser(editorUserId);
   });
 
   it("anon can select a published page", async () => {
-    const { data } = await anonClient.from("pages").select("id").eq("id", publishedPageId);
+    const { data } = await anonClient.from("hostmap_pages").select("id").eq("id", publishedPageId);
     expect(data).toHaveLength(1);
   });
 
   it("anon cannot see a draft page (filtered, not errored)", async () => {
-    const { data, error } = await anonClient.from("pages").select("id").eq("id", draftPageId);
+    const { data, error } = await anonClient.from("hostmap_pages").select("id").eq("id", draftPageId);
     expect(error).toBeNull();
     expect(data).toHaveLength(0);
   });
 
   it("anon cannot insert a page", async () => {
-    const { error } = await anonClient.from("pages").insert({ slug: `rls-test-anon-${Date.now()}`, title: "x" });
+    const { error } = await anonClient.from("hostmap_pages").insert({ slug: `rls-test-anon-${Date.now()}`, title: "x" });
     expect(error).not.toBeNull();
   });
 
   it("content_editor (pages.update) can edit a page's title", async () => {
-    const { error } = await editorClient.from("pages").update({ title: "Updated by content_editor" }).eq("id", draftPageId);
+    const { error } = await editorClient.from("hostmap_pages").update({ title: "Updated by content_editor" }).eq("id", draftPageId);
     expect(error).toBeNull();
-    const { data } = await admin.from("pages").select("title").eq("id", draftPageId).single();
+    const { data } = await admin.from("hostmap_pages").select("title").eq("id", draftPageId).single();
     expect(data?.title).toBe("Updated by content_editor");
   });
 
   it("content_editor cannot publish (has pages.update, not pages.publish)", async () => {
-    const { error } = await editorClient.rpc("publish_page", { p_page_id: draftPageId });
+    const { error } = await editorClient.rpc("hostmap_publish_page", { p_page_id: draftPageId });
     expect(error).not.toBeNull();
-    const { data } = await admin.from("pages").select("status").eq("id", draftPageId).single();
+    const { data } = await admin.from("hostmap_pages").select("status").eq("id", draftPageId).single();
     expect(data?.status).toBe("draft");
   });
 
   it("content_editor cannot add a Custom HTML block (requires pages.custom_html)", async () => {
     const { error } = await editorClient
-      .from("page_blocks")
+      .from("hostmap_page_blocks")
       .insert({ page_id: draftPageId, position: 0, block_type: "custom_html", config: { html: "<script>x</script>" } });
     expect(error).not.toBeNull();
   });
 
   it("no one can modify page_revisions directly (no UPDATE policy exists)", async () => {
-    const { data: revisions } = await admin.from("page_revisions").select("id").eq("page_id", publishedPageId).limit(1);
+    const { data: revisions } = await admin.from("hostmap_page_revisions").select("id").eq("page_id", publishedPageId).limit(1);
     const revisionId = revisions?.[0]?.id;
     expect(revisionId).toBeTruthy();
 
-    await editorClient.from("page_revisions").update({ change_note: "tampered" }).eq("id", revisionId);
-    const { data: after } = await admin.from("page_revisions").select("change_note").eq("id", revisionId).single();
+    await editorClient.from("hostmap_page_revisions").update({ change_note: "tampered" }).eq("id", revisionId);
+    const { data: after } = await admin.from("hostmap_page_revisions").select("change_note").eq("id", revisionId).single();
     expect(after?.change_note).not.toBe("tampered");
   });
 });

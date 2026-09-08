@@ -27,7 +27,7 @@ export type ThemeSettings = {
  * yet (e.g. a fresh database before the seed script runs). */
 export async function getSiteSettings(): Promise<SiteSettings> {
   const supabase = await createClient();
-  const { data } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+  const { data } = await supabase.from("hostmap_site_settings").select("*").eq("id", 1).maybeSingle();
   return (
     (data as SiteSettings | null) ?? {
       site_name: "",
@@ -47,13 +47,13 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 
 export async function getThemeSettings(): Promise<ThemeSettings> {
   const supabase = await createClient();
-  const { data } = await supabase.from("theme_settings").select("*").eq("id", 1).maybeSingle();
+  const { data } = await supabase.from("hostmap_theme_settings").select("*").eq("id", 1).maybeSingle();
   return (data as ThemeSettings | null) ?? { tokens: {}, dark_mode_enabled: true };
 }
 
 export async function updateSiteSettings(fields: Partial<SiteSettings>): Promise<void> {
   await requirePermission("settings.manage");
   const supabase = await createClient();
-  const { error } = await supabase.from("site_settings").upsert({ id: 1, ...fields });
+  const { error } = await supabase.from("hostmap_site_settings").upsert({ id: 1, ...fields });
   if (error) throw new Error(error.message);
 }
