@@ -133,3 +133,13 @@ export function mediaPublicUrl(row: Pick<MediaRow, "bucket" | "storage_path">): 
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   return `${base}/storage/v1/object/public/${row.bucket}/${row.storage_path}`;
 }
+
+/** Resolves a `*_media_id` foreign key (site_settings.logo_media_id, etc.)
+ * to a public URL, or null if unset/not found — callers render a text
+ * fallback rather than a broken image in that case. */
+export async function getMediaUrlById(mediaId: string | null): Promise<string | null> {
+  if (!mediaId) return null;
+  const supabase = await createClient();
+  const { data } = await supabase.from("media").select("bucket, storage_path").eq("id", mediaId).maybeSingle();
+  return data ? mediaPublicUrl(data) : null;
+}
