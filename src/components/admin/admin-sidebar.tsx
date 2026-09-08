@@ -2,7 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { AdminNavItem } from "@/lib/domain/admin-nav";
+import {
+  LayoutDashboard,
+  FileText,
+  Rss,
+  Image as ImageIcon,
+  Menu as MenuIcon,
+  Users,
+  Settings,
+  Link2,
+} from "lucide-react";
+import type { AdminNavItem, AdminNavIconName } from "@/lib/domain/admin-nav";
+
+const ICONS: Record<AdminNavIconName, typeof LayoutDashboard> = {
+  LayoutDashboard,
+  FileText,
+  Rss,
+  Image: ImageIcon,
+  Menu: MenuIcon,
+  Users,
+  Settings,
+  Link2,
+};
 
 export function AdminSidebar({ items }: { items: AdminNavItem[] }) {
   const pathname = usePathname();
@@ -11,7 +32,7 @@ export function AdminSidebar({ items }: { items: AdminNavItem[] }) {
     <nav className="flex flex-col gap-0.5 p-3">
       {items.map((item) => {
         const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
-        const Icon = item.icon;
+        const Icon = ICONS[item.icon];
         return (
           <Link
             key={item.href}
