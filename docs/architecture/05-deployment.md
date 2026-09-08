@@ -4,13 +4,51 @@
 
 | Environment | Next.js runs on | Database | Purpose |
 | --- | --- | --- | --- |
-| Local | `next dev` (Turbopack) | Supabase CLI local stack (`supabase start` — local Postgres/Auth/Storage in Docker) **or** the hosted dev project directly if Docker isn't available | Day-to-day development |
-| Preview | Vercel Preview deployment, one per PR | A **Supabase branch** off the dev project (`create_branch`), auto-created/merged alongside the PR | Review changes against real Postgres/RLS without touching production data — §82's "preview environments should never accidentally connect to production data" enforced structurally, not by convention |
-| Production | Vercel Production deployment (main branch) | The dedicated `hostmap` Supabase project | Live site |
+| Local | `next dev` (Turbopack) | Supabase CLI local stack (`supabase start` — local Postgres/Auth/Storage in Docker) **or** the hosted project directly if Docker isn't available | Day-to-day development |
+| Preview | Vercel Preview deployment, one per PR | Same shared project as production (see below) | Review changes before merge |
+| Production | Vercel Production deployment (main branch) | `supabase-amethyst-cloud` — a Supabase project shared with two unrelated sibling apps (`nextdash`, `dohost`) | Live site |
 
-Supabase branching (a real Postgres branch per PR, not a shared dev
-database) is why "preview never touches production" is a structural
-guarantee here rather than a policy someone has to remember.
+**Not a dedicated project — a shared one, isolated by naming, not by
+schema.** The original plan here was a dedicated Supabase project (and,
+after that hit the account's 2-free-project cap, a dedicated Postgres
+schema as a fallback). Neither happened: the user connected `hostmap` to
+the same `supabase-amethyst-cloud` project already used by `nextdash` (and,
+at the time, `dohost`) via Vercel's Supabase integration, which was the
+practical path forward. A dedicated schema turned out not to be viable
+either — Postgres/PostgREST's "Exposed schemas" setting (what makes a
+schema reachable from the JS client at all) is dashboard-only, with no
+Management API or MCP tool to set it non-interactively, so a second schema
+would have needed a manual one-time dashboard step this session couldn't
+verify or perform.
+
+Instead, every hostmap-owned object in the shared project's `public`
+schema — every table, enum type, function, and index — is named with a
+`hostmap_` prefix (e.g. `public.hostmap_pages`, `public.hostmap_publish_page()`).
+This was not just future-proofing: `dohost`'s pre-existing `roles`,
+`permissions`, `role_permissions`, and `audit_logs` tables would have
+collided outright with hostmap's own (identically-named, unprefixed) design.
+The storage bucket is `hostmap-media`, not `media`, for the same reason.
+`auth.users`/Supabase Auth itself needed no such treatment — neither
+sibling app uses it (both are Prisma-backed with their own identity
+tables), confirmed empty/trigger-free before hostmap's own
+`on_auth_user_created` trigger was added.
+
+Consequence for anyone reading the migrations or querying the database
+directly: there is no `pages` table, only `hostmap_pages`; no
+`has_permission()`, only `hostmap_has_permission()`; and so on for every
+name in `supabase/migrations/`. The Supabase client constructors
+(`src/lib/supabase/{client,server,admin}.ts`) still use the plain default
+`public` schema — nothing about the connection changed, only the object
+names within it — and are typed against `src/lib/supabase/database.types.ts`,
+generated directly from the live project (includes the sibling apps'
+tables too, since types are generated per-schema, not per-owner; the app
+simply never references them).
+
+Because Preview and Production point at the same project, there is
+currently no structural guarantee that preview deployments can't touch
+production data (unlike the per-PR Supabase-branch design this doc
+originally called for) — worth revisiting if/when a dedicated project or
+schema-exposure access becomes available.
 
 ## Environment variables
 
@@ -38,8 +76,9 @@ QA gate (§91) if it ever did.
 - One Vercel project (`hostmap`), linked to `LT-MJ/hostmap`, Production
   Branch = the repo's default branch.
 - Environment variables scoped per Vercel environment (Production/Preview/
-  Development), matching the table above — Preview's Supabase URL/keys
-  point at that PR's branch database, not production.
+  Development), matching the table above — currently the same values in
+  both, since Preview and Production point at the same shared project (see
+  Environments above).
 - **Vercel Cron** (`vercel.json`'s `crons` array) hits
   `app/api/cron/publish-scheduled/route.ts` once daily (`0 6 * * *`); the
   route checks the `CRON_SECRET` header before doing anything, then calls
@@ -77,10 +116,12 @@ QA gate (§91) if it ever did.
 
 ## Storage
 
-Supabase Storage, two buckets: `media` (public — served directly, cache
-headers set liberally since content is versioned by filename/path) and
-`private` (reserved for Phase 6+ customer-uploaded documents/attachments —
-not created until something needs it). No production upload ever touches
+Supabase Storage, two buckets: `hostmap-media` (public — served directly,
+cache headers set liberally since content is versioned by filename/path;
+named with the project prefix rather than plain `media` for the same
+shared-project reason as the tables above) and `private` (reserved for
+Phase 6+ customer-uploaded documents/attachments — not created until
+something needs it). No production upload ever touches
 the local filesystem (§12/§10) — every upload goes straight to Storage from
 a Server Action, and only a validated `{path, bucket}` reference is
 persisted in Postgres, never the file bytes.
