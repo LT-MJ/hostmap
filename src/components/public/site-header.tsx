@@ -3,6 +3,7 @@ import Image from "next/image";
 import { getMenuTree } from "@/lib/domain/navigation";
 import { getSiteSettings } from "@/lib/domain/settings";
 import { getMediaUrlById } from "@/lib/domain/media";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNav } from "./mobile-nav";
 
 export async function SiteHeader() {
@@ -32,7 +33,10 @@ export async function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <MobileNav items={menu} />
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <MobileNav items={menu} />
+        </div>
       </div>
     </header>
   );
